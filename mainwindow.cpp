@@ -7,6 +7,7 @@
 #include <QScrollBar>
 #include <itemwidget.h>
 #include <singlerow.h>
+#include <QMenuBar>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -35,11 +36,18 @@ MainWindow::MainWindow(QWidget *parent) :
     w->container = singleItem;
     SingleRow* singleRow = new SingleRow(singleItem, nullptr);
     singleItem->rowContainer = singleRow;
-    singleRow->indexInRowsList = rows.size();
     rows.push_back(singleRow);
 
     QApplication::connect(scrollArea->horizontalScrollBar(), SIGNAL(rangeChanged(int,int)), this, SLOT(scrollHorizontal()));
     QApplication::connect(scrollArea->verticalScrollBar(), SIGNAL(rangeChanged(int,int)), this, SLOT(scrollHorizontal()));
+
+    // This is how to add a menu bar
+    QAction* newAct = new QAction(tr("&New"), this);
+    newAct->setShortcuts(QKeySequence::New);
+    newAct->setStatusTip(tr("Create a new file"));
+
+    QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
+    fileMenu->addAction(newAct);
 }
 
 // This is just creating a single one of the example widgets which I want to connect
@@ -73,14 +81,17 @@ ItemWidget* MainWindow::CreateNewItem(QString text/* = ""*/){
     rightSidePanel->setAlignment(Qt::AlignTop);
 
     QPushButton* button1 = new QPushButton("Update");
-    QPushButton* button2 = new QPushButton("Fork");
+    QPushButton* button2 = new QPushButton("Branch");
+    QPushButton* button3 = new QPushButton("Complete");
 
     QApplication::connect(button1, SIGNAL(clicked(bool)), this, SLOT(AddItemMiddle()));
     QApplication::connect(button2, SIGNAL(clicked(bool)), this, SLOT(AddItemDown()));
+    QApplication::connect(button3, SIGNAL(clicked(bool)), this, SLOT(CompleteRow()));
 
 
     rightSidePanel->addWidget(button1);
     rightSidePanel->addWidget(button2);
+    rightSidePanel->addWidget(button3);
 
 
     QWidget* rightPanelWidget = new QWidget();
@@ -117,13 +128,28 @@ void MainWindow::AddNewColumn()
         w->container = singleItem;
         singleItem->rowContainer = row;
 
-        w->setLocation(
-                    parentItemWidget->getColumn() + 1,
-                    (parentItemWidget->getRow() >= shiftDownIfBelowThis) ? parentItemWidget->getRow() + 1 : parentItemWidget->getRow());
+        int newRow;
+        if (parentItemWidget->getRow() >= shiftDownIfBelowThis){
+            newRow = parentItemWidget->getRow() + 1;
+        }
+        else if (parentItemWidget->getRow() >= shiftUpIfBelowThis) {
+            newRow = parentItemWidget->getRow() - 1;
+        }
+        else{
+            newRow = parentItemWidget->getRow();
+        }
+        w->setLocation(parentItemWidget->getColumn() + 1, newRow);
 
         row->items.push_back(singleItem);
         gridLayout->addWidget(w,w->getRow(), w->getColumn());
         drawWidget->updateEndpoints(parentItemWidget, w);
+
+        if (mostRecentlyAdded == nullptr){
+            // This happens when you hit "complete". A new row is added,
+            // but no item was added so we just put a dummy one
+            mostRecentlyAdded = w;
+        }
+
         ++i;
     }
 }
@@ -133,6 +159,7 @@ void MainWindow::scrollHorizontal()
     if (mostRecentlyAdded != nullptr){
         scrollArea->ensureWidgetVisible(mostRecentlyAdded);
         drawWidget->update();
+        mostRecentlyAdded = nullptr;
     }
 }
 
@@ -144,6 +171,36 @@ void MainWindow::AddItemMiddle()
 void MainWindow::AddItemDown()
 {
     AddItem(CreationDirection::Down, QObject::sender());
+}
+
+void MainWindow::CompleteRow()
+{
+    if (rows.size() == 1){
+        // This is the only task, so do nothing
+        return;
+    }
+
+    ItemWidget* sender = qobject_cast<ItemWidget*>(QObject::sender()->parent()->parent());
+    SingleRow* row = sender->container->rowContainer;
+    rows.remove(row);
+    mostRecentlyAdded = nullptr;
+    modifiedRow = -5;
+    shiftUpIfBelowThis = sender->getRow(); shiftDownIfBelowThis = 100000;
+    AddNewColumn();
+}
+
+int MainWindow::positionInListHelper(SingleRow* rowToFind){
+    int i = 0;
+    for(SingleRow* row : rows){
+        if (row == rowToFind){
+            return i;
+        }
+        ++i;
+    }
+
+    // If we get here...fuck
+    Q_ASSERT(false);
+    return 0;
 }
 
 void MainWindow::AddItem(CreationDirection direction, QObject* sender)
@@ -160,7 +217,6 @@ void MainWindow::AddItem(CreationDirection direction, QObject* sender)
     case CreationDirection::Middle:
     {
         drawWidget->updateEndpoints(parent, w);
-        //w->setStyleSheet(getStyleSheetString(drawWidget->assignedColors[w]->name()));
 
         SingleItem* singleItem = new SingleItem(w);
         w->container = singleItem;
@@ -173,14 +229,13 @@ void MainWindow::AddItem(CreationDirection direction, QObject* sender)
         w->setLocation(parent->getColumn() + 1, parent->getRow());
 
         // Didn't add new row so don't need to shift down
-        shiftDownIfBelowThis = 100000; // Horrible style, I know
-        modifiedRow = parentsRow->indexInRowsList;
+        shiftDownIfBelowThis = 100000; shiftUpIfBelowThis = 100000;// Horrible style, I know
+        modifiedRow = positionInListHelper(parentsRow);
     }
         break;
     case CreationDirection::Down:
     {
         drawWidget->updateEndpoints(parent, w, new QColor(colors[colorIndex++ % colors.size()]));
-        //w->setStyleSheet(getStyleSheetString(drawWidget->assignedColors[w]->name()));
 
         SingleItem* singleItem = new SingleItem(w);
         w->container = singleItem;
@@ -188,11 +243,10 @@ void MainWindow::AddItem(CreationDirection direction, QObject* sender)
         SingleRow* newRow = new SingleRow(singleItem, parent->container);
         singleItem->rowContainer = newRow;
 
-        newRow->indexInRowsList = rows.size();
         rows.push_back(newRow);
 
         w->setLocation(parent->getColumn() + 1, parent->getRow() + 1);
-        shiftDownIfBelowThis = w->getRow();
+        shiftDownIfBelowThis = w->getRow(); shiftUpIfBelowThis = 100000;
         modifiedRow = rows.size() - 1;
     }
         break;

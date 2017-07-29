@@ -16,13 +16,11 @@ public:
         parent(parentIn)
     {
         items.push_back(headIn);
-        //headIn->rowContainer = this;
     }
 
     SingleItem* head;
     SingleItem* parent;
     std::list<SingleItem*> items;
-    int indexInRowsList;
 };
 
 #endif // SINGLEROW_H

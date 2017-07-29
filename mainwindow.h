@@ -36,6 +36,7 @@ public slots:
     void scrollHorizontal();
     void AddItemMiddle();
     void AddItemDown();
+    void CompleteRow();
 
 private:
     Ui::MainWindow *ui;
@@ -43,7 +44,7 @@ private:
     void AddItem(CreationDirection, QObject*);
     int counter = 0, startCol = 0, startRow = 5;
     ItemWidget* mostRecentlyAdded = nullptr;
-    int shiftDownIfBelowThis, modifiedRow;
+    int shiftDownIfBelowThis, modifiedRow, shiftUpIfBelowThis;
 
     QString getStyleSheetString(QString color){
         // This fuckery is so that the children don't inherit the parent's style sheet
@@ -69,6 +70,8 @@ private:
         QColor("yellow"),
     };
     int colorIndex = 0;
+
+    int positionInListHelper(SingleRow* rowToFind);
 
 };
 
